@@ -52,3 +52,12 @@ export default tseslint.config({
   },
 })
 ```
+
+## v0 template
+
+https://v0.dev/chat/image-to-beads-converter-FfXHBouITZr
+
+```
+npx shadcn@2.3.0 add "https://v0.dev/chat/b/b_SId6YpQ8jAR?token=eyJhbGciOiJkaXIiLCJlbmMiOiJBMjU2R0NNIn0..9c_YRPcPAq7LDQam.npvCp-FRx5TYuq6pDcz4kmRqws9sU2pQaY_XMKBn3vM-9NNVFMtt6n-Rsag.328LJGxm0v700YqEM7LfCw"
+
+```
