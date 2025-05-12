@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState, useRef, useEffect } from "react"
-import { Upload, Download, Loader2, RefreshCw, Info, ChevronDown, ChevronUp } from "lucide-react"
+import { Upload, Download, Loader2, RefreshCw, Info, ChevronDown, ChevronUp, Pencil, Eraser, Check, X, Pipette } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
 import { Label } from "@/components/ui/label"
@@ -20,7 +20,14 @@ export default function BeadPatternGenerator() {
   const [beadColors, setBeadColors] = useState<string[][]>([])
   const [isProcessing, setIsProcessing] = useState(false)
   const [colorCounts, setColorCounts] = useState<Record<string, number>>({})
-  const [showBeadCount, setShowBeadCount] = useState(false) // New state for toggling bead count visibility
+  const [showBeadCount, setShowBeadCount] = useState(false) // State for toggling bead count visibility
+  
+  // Editing mode states
+  const [isEditMode, setIsEditMode] = useState(false)
+  const [editTool, setEditTool] = useState<'add' | 'erase' | 'pick'>('add')
+  const [selectedColor, setSelectedColor] = useState<string>('#000000')
+  const [editedBeadColors, setEditedBeadColors] = useState<string[][]>([])
+  const [hasEdits, setHasEdits] = useState(false)
 
   // Configuration options
   const [beadSize, setBeadSize] = useState(10) // Size of each bead in pixels
@@ -28,11 +35,13 @@ export default function BeadPatternGenerator() {
   const [selectedPalette, setSelectedPalette] = useState("standard")
   const [showGrid, setShowGrid] = useState(true)
   const [dithering, setDithering] = useState(false)
-  const [removeBackground, setRemoveBackground] = useState(false) // New setting for background removal
+  const [removeBackground, setRemoveBackground] = useState(false) // Setting for background removal
   const [backgroundThreshold, setBackgroundThreshold] = useState(30) // Threshold for background detection (0-100)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const processingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const patternCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  const canvasContextRef = useRef<CanvasRenderingContext2D | null>(null)
 
   // Process image whenever settings change
   useEffect(() => {
@@ -60,6 +69,10 @@ export default function BeadPatternGenerator() {
 
         setBeadPattern(result.patternDataUrl)
         setBeadColors(result.colorGrid)
+        
+        // Initialize edited colors with the original pattern
+        setEditedBeadColors(JSON.parse(JSON.stringify(result.colorGrid)))
+        setHasEdits(false)
 
         // Count colors (excluding transparent/background)
         const counts: Record<string, number> = {}
@@ -85,6 +98,49 @@ export default function BeadPatternGenerator() {
       }
     }
   }, [originalImage, beadSize, maxBeads, selectedPalette, showGrid, dithering, removeBackground, backgroundThreshold])
+  
+  // Initialize canvas for editing when entering edit mode
+  useEffect(() => {
+    if (isEditMode && editedBeadColors.length && patternCanvasRef.current) {
+      const canvas = patternCanvasRef.current
+      const ctx = canvas.getContext('2d', { alpha: true })
+      
+      if (!ctx) return
+      
+      const width = editedBeadColors[0].length
+      const height = editedBeadColors.length
+      
+      // Set canvas size
+      canvas.width = width * beadSize
+      canvas.height = height * beadSize
+      
+      // Clear canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      
+      // Draw each bead as a colored square
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const color = editedBeadColors[y][x]
+          
+          // Skip transparent beads
+          if (color === "transparent") continue
+          
+          ctx.fillStyle = color
+          ctx.fillRect(x * beadSize, y * beadSize, beadSize, beadSize)
+          
+          // Draw grid lines if enabled
+          if (showGrid) {
+            ctx.strokeStyle = "rgba(0, 0, 0, 0.2)"
+            ctx.lineWidth = 0.5
+            ctx.strokeRect(x * beadSize, y * beadSize, beadSize, beadSize)
+          }
+        }
+      }
+      
+      // Store context for later use
+      canvasContextRef.current = ctx
+    }
+  }, [isEditMode, editedBeadColors, beadSize, showGrid])
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -101,6 +157,11 @@ export default function BeadPatternGenerator() {
   const handleDownload = () => {
     if (!beadPattern) return
 
+    // If in edit mode, generate pattern from current edits before downloading
+    if (isEditMode && hasEdits) {
+      generateEditedPattern()
+    }
+
     const link = document.createElement("a")
     link.href = beadPattern
     link.download = "bead-pattern.png"
@@ -113,6 +174,108 @@ export default function BeadPatternGenerator() {
     fileInputRef.current?.click()
   }
 
+  // Handle pattern editing
+  const handlePatternEdit = (x: number, y: number) => {
+    if (!editedBeadColors.length || !isEditMode) return
+    
+    // Calculate the position in the grid based on mouse coordinates
+    const width = editedBeadColors[0].length
+    const height = editedBeadColors.length
+    
+    // Ensure x and y are within bounds
+    if (x < 0 || x >= width || y < 0 || y >= height) return
+    
+    // Clone the current state to avoid direct mutation
+    const newBeadColors = [...editedBeadColors]
+    
+    if (editTool === 'add') {
+      // Add a bead with the selected color
+      newBeadColors[y][x] = selectedColor
+    } else if (editTool === 'erase') {
+      // Make the bead transparent
+      newBeadColors[y][x] = 'transparent'
+    } else if (editTool === 'pick') {
+      // Pick the color at the clicked position
+      const pickedColor = editedBeadColors[y][x]
+      if (pickedColor !== 'transparent') {
+        setSelectedColor(pickedColor)
+        setEditTool('add') // Switch back to add tool after picking a color
+      }
+    }
+    
+    setEditedBeadColors(newBeadColors)
+    setHasEdits(true)
+  }
+  
+  // Generate an updated pattern from edited bead colors
+  const generateEditedPattern = () => {
+    if (!editedBeadColors.length || !patternCanvasRef.current) return
+    
+    const canvas = patternCanvasRef.current
+    const ctx = canvas.getContext('2d', { alpha: true })
+    
+    if (!ctx) return
+    
+    const width = editedBeadColors[0].length
+    const height = editedBeadColors.length
+    
+    // Set canvas size
+    canvas.width = width * beadSize
+    canvas.height = height * beadSize
+    
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    
+    // Draw each bead as a colored square
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const color = editedBeadColors[y][x]
+        
+        // Skip transparent beads
+        if (color === "transparent") continue
+        
+        ctx.fillStyle = color
+        ctx.fillRect(x * beadSize, y * beadSize, beadSize, beadSize)
+        
+        // Draw grid lines if enabled
+        if (showGrid) {
+          ctx.strokeStyle = "rgba(0, 0, 0, 0.2)"
+          ctx.lineWidth = 0.5
+          ctx.strokeRect(x * beadSize, y * beadSize, beadSize, beadSize)
+        }
+      }
+    }
+    
+    // Convert to data URL
+    const patternDataUrl = canvas.toDataURL("image/png")
+    setBeadPattern(patternDataUrl)
+    
+    // Count colors
+    const counts: Record<string, number> = {}
+    for (const row of editedBeadColors) {
+      for (const color of row) {
+        if (color !== "transparent") {
+          counts[color] = (counts[color] || 0) + 1
+        }
+      }
+    }
+    setColorCounts(counts)
+  }
+  
+  // Apply edits and exit edit mode
+  const applyEdits = () => {
+    generateEditedPattern()
+    setIsEditMode(false)
+  }
+  
+  // Cancel edits and exit edit mode
+  const cancelEdits = () => {
+    // Restore original bead colors
+    setEditedBeadColors(JSON.parse(JSON.stringify(beadColors)))
+    setHasEdits(false)
+    setIsEditMode(false)
+  }
+  
   // Calculate total bead count
   const totalBeadCount = Object.values(colorCounts).reduce((sum, count) => sum + count, 0)
 
@@ -265,8 +428,8 @@ export default function BeadPatternGenerator() {
                     </div>
                     <Slider
                       id="background-threshold"
-                      min={5}
-                      max={50}
+                      min={1}
+                      max={100}
                       step={1}
                       value={[backgroundThreshold]}
                       onValueChange={(value) => setBackgroundThreshold(value[0])}
@@ -321,16 +484,150 @@ export default function BeadPatternGenerator() {
             <CardContent className="pt-6 flex flex-col h-full">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-lg font-semibold">Pattern Preview</h2>
-                {beadPattern && (
-                  <Button size="sm" onClick={handleDownload}>
-                    <Download className="h-4 w-4 mr-2" />
-                    Download
-                  </Button>
-                )}
+                <div className="flex gap-2">
+                  {beadPattern && !isEditMode && (
+                    <>
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        onClick={() => setIsEditMode(true)}
+                        disabled={isProcessing || !beadPattern}
+                      >
+                        <Pencil className="h-4 w-4 mr-2" />
+                        Edit
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        onClick={handleDownload}
+                      >
+                        <Download className="h-4 w-4 mr-2" />
+                        Download
+                      </Button>
+                    </>
+                  )}
+                  {isEditMode && (
+                    <>
+                      <Button 
+                        size="sm" 
+                        variant="default" 
+                        onClick={applyEdits}
+                        disabled={!hasEdits}
+                      >
+                        <Check className="h-4 w-4 mr-2" />
+                        Apply
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        onClick={cancelEdits}
+                      >
+                        <X className="h-4 w-4 mr-2" />
+                        Cancel
+                      </Button>
+                    </>
+                  )}
+                </div>
               </div>
+              
+              {/* Editing tools */}
+              {isEditMode && beadPattern && (
+                <div className="mb-4 border rounded-md p-3 bg-muted/30">
+                  <div className="flex justify-between items-center mb-3">
+                    <div className="flex gap-2">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button 
+                              size="sm"
+                              variant={editTool === 'add' ? 'default' : 'outline'}
+                              onClick={() => setEditTool('add')}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Add pixels</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                      
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button 
+                              size="sm"
+                              variant={editTool === 'erase' ? 'default' : 'outline'}
+                              onClick={() => setEditTool('erase')}
+                            >
+                              <Eraser className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Erase pixels</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                      
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button 
+                              size="sm"
+                              variant={editTool === 'pick' ? 'default' : 'outline'}
+                              onClick={() => setEditTool('pick')}
+                            >
+                              <Pipette className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Pick color from pattern</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="color-preview">Current color:</Label>
+                      <div 
+                        id="color-preview"
+                        className="w-6 h-6 border rounded" 
+                        style={{ backgroundColor: selectedColor }}
+                      ></div>
+                    </div>
+                  </div>
+                  
+                  {/* Color palette from existing colors */}
+                  <div>
+                    <Label className="text-xs mb-1 block">Pattern colors:</Label>
+                    <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto p-1 border rounded bg-background">
+                      {Object.keys(colorCounts)
+                        .sort((a, b) => colorCounts[b] - colorCounts[a])
+                        .map((color) => (
+                          <TooltipProvider key={color}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  className={`w-5 h-5 rounded-sm border ${selectedColor === color ? 'ring-2 ring-primary' : ''}`}
+                                  style={{ backgroundColor: color }}
+                                  onClick={() => {
+                                    setSelectedColor(color)
+                                    setEditTool('add') // Switch to add tool when selecting a color
+                                  }}
+                                />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>{colorCounts[color]} beads</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        ))}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div
-                className={`flex-grow flex flex-col items-center justify-center border rounded-md p-4 min-h-[300px] ${removeBackground ? "bg-gray-200 bg-opacity-50 bg-grid" : ""}`}
+                className={`flex-grow flex flex-col items-center justify-center border rounded-md p-4 min-h-[300px] ${removeBackground ? "bg-checkered" : ""}`}
               >
                 {isProcessing ? (
                   <div className="flex flex-col items-center justify-center">
@@ -342,8 +639,97 @@ export default function BeadPatternGenerator() {
                     <p>Upload an image to generate a pattern</p>
                   </div>
                 ) : beadPattern ? (
-                  <div className="overflow-auto max-h-[500px] max-w-full">
-                    <img src={beadPattern || "/placeholder.svg"} alt="Bead Pattern" className="mx-auto" />
+                  <div className="overflow-auto max-h-[500px] max-w-full relative">
+                    {isEditMode ? (
+                      <canvas 
+                        ref={patternCanvasRef}
+                        className="mx-auto"
+                        style={{ cursor: editTool === 'pick' ? 'crosshair' : editTool === 'erase' ? 'not-allowed' : 'pointer' }}
+                        onClick={(e) => {
+                          // Get canvas and coordinates
+                          const canvas = patternCanvasRef.current
+                          if (!canvas || !editedBeadColors.length) return
+                          
+                          // Calculate the position in the grid
+                          const rect = canvas.getBoundingClientRect()
+                          const scaleX = canvas.width / rect.width
+                          const scaleY = canvas.height / rect.height
+                          
+                          const x = Math.floor(((e.clientX - rect.left) * scaleX) / beadSize)
+                          const y = Math.floor(((e.clientY - rect.top) * scaleY) / beadSize)
+                          
+                          // Update the grid
+                          handlePatternEdit(x, y)
+                          
+                          // Redraw the canvas
+                          const ctx = canvas.getContext('2d', { alpha: true })
+                          if (!ctx) return
+                          
+                          // Clear the space where the bead was clicked
+                          ctx.clearRect(x * beadSize, y * beadSize, beadSize, beadSize)
+                          
+                          // If we're not erasing, draw the new bead
+                          if (editTool !== 'erase' || editTool === 'pick') {
+                            const color = editedBeadColors[y][x]
+                            if (color !== 'transparent') {
+                              ctx.fillStyle = color
+                              ctx.fillRect(x * beadSize, y * beadSize, beadSize, beadSize)
+                              
+                              // Draw grid line if enabled
+                              if (showGrid) {
+                                ctx.strokeStyle = "rgba(0, 0, 0, 0.2)"
+                                ctx.lineWidth = 0.5
+                                ctx.strokeRect(x * beadSize, y * beadSize, beadSize, beadSize)
+                              }
+                            }
+                          }
+                        }}
+                        onMouseMove={(e) => {
+                          // Only handle mouse move with button pressed (dragging)
+                          if (e.buttons !== 1) return
+                          
+                          // Get canvas and coordinates
+                          const canvas = patternCanvasRef.current
+                          if (!canvas || !editedBeadColors.length) return
+                          
+                          // Calculate the position in the grid
+                          const rect = canvas.getBoundingClientRect()
+                          const scaleX = canvas.width / rect.width
+                          const scaleY = canvas.height / rect.height
+                          
+                          const x = Math.floor(((e.clientX - rect.left) * scaleX) / beadSize)
+                          const y = Math.floor(((e.clientY - rect.top) * scaleY) / beadSize)
+                          
+                          // Update the grid
+                          handlePatternEdit(x, y)
+                          
+                          // Redraw the canvas
+                          const ctx = canvas.getContext('2d', { alpha: true })
+                          if (!ctx) return
+                          
+                          // Clear the space where the bead was clicked
+                          ctx.clearRect(x * beadSize, y * beadSize, beadSize, beadSize)
+                          
+                          // If we're not erasing, draw the new bead
+                          if (editTool !== 'erase') {
+                            const color = editedBeadColors[y][x]
+                            if (color !== 'transparent') {
+                              ctx.fillStyle = color
+                              ctx.fillRect(x * beadSize, y * beadSize, beadSize, beadSize)
+                              
+                              // Draw grid line if enabled
+                              if (showGrid) {
+                                ctx.strokeStyle = "rgba(0, 0, 0, 0.2)"
+                                ctx.lineWidth = 0.5
+                                ctx.strokeRect(x * beadSize, y * beadSize, beadSize, beadSize)
+                              }
+                            }
+                          }
+                        }}
+                      />
+                    ) : (
+                      <img src={beadPattern || "/placeholder.svg"} alt="Bead Pattern" className="mx-auto" />
+                    )}
                   </div>
                 ) : (
                   <div className="text-center text-muted-foreground">

@@ -15,6 +15,9 @@ export async function processImage(
   removeBackground = false,
   backgroundThreshold = 30,
 ): Promise<ProcessImageResult> {
+  // Convert threshold to 0-1 range for easier calculations
+  const bgThreshold = backgroundThreshold / 100;
+  
   return new Promise((resolve, reject) => {
     const img = new Image()
     img.crossOrigin = "anonymous"
@@ -59,76 +62,113 @@ export async function processImage(
 
         // Create a 2D array to store the color of each bead
         const colorGrid: string[][] = []
-
-        // Detect background color if background removal is enabled
-        const backgroundColors: { r: number; g: number; b: number; count: number }[] = []
-
+        
+        // For background removal: store transparent pixel indices
+        const transparentPixels = new Set<number>();
+        let bgColorR = 0, bgColorG = 0, bgColorB = 0;
+        
+        // Background removal processing
         if (removeBackground) {
-          // First, collect all colors and their frequencies
-          const colorFrequency: Record<string, { r: number; g: number; b: number; count: number }> = {}
-
-          for (let y = 0; y < height; y++) {
-            for (let x = 0; x < width; x++) {
-              const index = (y * width + x) * 4
-              const r = data[index]
-              const g = data[index + 1]
-              const b = data[index + 2]
-
-              const colorKey = `${r},${g},${b}`
-
-              if (!colorFrequency[colorKey]) {
-                colorFrequency[colorKey] = { r, g, b, count: 0 }
-              }
-              colorFrequency[colorKey].count++
+          // STEP 1: Determine background color from corners/edges
+          // Sample points to check for background color
+          const samplePoints = [
+            {x: 0, y: 0},                    // Top-left corner
+            {x: width-1, y: 0},              // Top-right corner
+            {x: 0, y: height-1},             // Bottom-left corner
+            {x: width-1, y: height-1},       // Bottom-right corner
+            {x: Math.floor(width/2), y: 0},  // Top middle
+            {x: Math.floor(width/2), y: height-1}, // Bottom middle
+            {x: 0, y: Math.floor(height/2)}, // Left middle
+            {x: width-1, y: Math.floor(height/2)}, // Right middle
+          ];
+          
+          // Count color frequencies from sample points
+          const colorFreq: Record<string, {r: number, g: number, b: number, count: number}> = {};
+          
+          for (const point of samplePoints) {
+            const idx = (point.y * width + point.x) * 4;
+            const r = data[idx];
+            const g = data[idx + 1];
+            const b = data[idx + 2];
+            const key = `${r},${g},${b}`;
+            
+            if (!colorFreq[key]) {
+              colorFreq[key] = {r, g, b, count: 0};
             }
+            colorFreq[key].count++;
           }
-
-          // Convert to array and sort by frequency (most common first)
-          const sortedColors = Object.values(colorFrequency).sort((a, b) => b.count - a.count)
-
-          // Take the most common color as the primary background color
-          // and any similar colors based on threshold
+          
+          // Find the most common color from corners/edges
+          const sortedColors = Object.values(colorFreq).sort((a, b) => b.count - a.count);
           if (sortedColors.length > 0) {
-            const primaryBackground = sortedColors[0]
-            backgroundColors.push(primaryBackground)
-
-            // Also include colors that are similar to the most common color
-            // and have significant frequency (at least 5% of the most common)
-            const similarityThreshold = (backgroundThreshold / 100) * 255 * 3
-            const frequencyThreshold = primaryBackground.count * 0.05
-
-            for (let i = 1; i < sortedColors.length; i++) {
-              const color = sortedColors[i]
-              if (color.count < frequencyThreshold) continue
-
-              const distance = Math.sqrt(
-                Math.pow(color.r - primaryBackground.r, 2) +
-                  Math.pow(color.g - primaryBackground.g, 2) +
-                  Math.pow(color.b - primaryBackground.b, 2),
-              )
-
-              if (distance < similarityThreshold) {
-                backgroundColors.push(color)
-              }
+            bgColorR = sortedColors[0].r;
+            bgColorG = sortedColors[0].g;
+            bgColorB = sortedColors[0].b;
+          }
+          
+          // STEP 2: Flood fill from edges ONLY to identify contiguous background
+          // This ensures we only remove background outside the shape
+          const queue: {x: number, y: number}[] = [];
+          const visited = new Set<number>();
+          
+          // ONLY add edge pixels to the starting queue (borders of the image)
+          // Top and bottom edges
+          for (let x = 0; x < width; x++) {
+            queue.push({x, y: 0});
+            queue.push({x, y: height - 1});
+          }
+          
+          // Left and right edges (excluding corners which are already added)
+          for (let y = 1; y < height - 1; y++) {
+            queue.push({x: 0, y});
+            queue.push({x: width - 1, y});
+          }
+          
+          // Flood fill algorithm to find connected background areas
+          // ONLY starting from the edges - this prevents removing "inside" areas
+          while (queue.length > 0) {
+            const {x, y} = queue.shift()!;
+            const idx = (y * width + x);
+            const pixelIdx = idx * 4;
+            
+            // Skip if already visited
+            if (visited.has(idx)) continue;
+            visited.add(idx);
+            
+            // Get current pixel color
+            const r = data[pixelIdx];
+            const g = data[pixelIdx + 1];
+            const b = data[pixelIdx + 2];
+            
+            // Color similarity calculation - normalized to 0-1 range
+            const colorDiff = Math.sqrt(
+              Math.pow(r - bgColorR, 2) + 
+              Math.pow(g - bgColorG, 2) + 
+              Math.pow(b - bgColorB, 2)
+            ) / (255 * Math.sqrt(3));
+            
+            // If color is similar to background color
+            if (colorDiff < bgThreshold) {
+              // Mark as transparent
+              transparentPixels.add(idx);
+              
+              // Add neighboring pixels to queue
+              if (x > 0) queue.push({x: x-1, y});
+              if (x < width-1) queue.push({x: x+1, y});
+              if (y > 0) queue.push({x, y: y-1});
+              if (y < height-1) queue.push({x, y: y+1});
             }
           }
+          
+          // REMOVED the second pass that was catching disconnected background areas
+          // This ensures we ONLY remove the outer background and never similar colors inside the shape
         }
-
-        // Function to check if a color is similar to background
-        const isBackgroundColor = (r: number, g: number, b: number): boolean => {
-          if (!removeBackground || backgroundColors.length === 0) return false
-
-          // Convert threshold percentage to color distance
-          const threshold = (backgroundThreshold / 100) * 255 * 3
-
-          // Check if the color is similar to any background color
-          return backgroundColors.some((bgColor) => {
-            const distance = Math.sqrt(
-              Math.pow(r - bgColor.r, 2) + Math.pow(g - bgColor.g, 2) + Math.pow(b - bgColor.b, 2),
-            )
-            return distance < threshold
-          })
-        }
+        
+        // Function to check if a pixel should be transparent
+        const isBackgroundColor = (x: number, y: number): boolean => {
+          if (!removeBackground) return false;
+          return transparentPixels.has(y * width + x);
+        };
 
         // Process each pixel and find the closest bead color
         if (dithering) {
@@ -148,7 +188,7 @@ export async function processImage(
               const a = pixels[idx + 3]
 
               // Check if this pixel should be transparent (background)
-              if (isBackgroundColor(r, g, b)) {
+              if (isBackgroundColor(x, y)) {
                 colorGrid[y][x] = "transparent"
                 data[idx + 3] = 0 // Make transparent in the output
                 continue
@@ -208,7 +248,7 @@ export async function processImage(
               const b = data[index + 2]
 
               // Check if this pixel should be transparent (background)
-              if (isBackgroundColor(r, g, b)) {
+              if (isBackgroundColor(x, y)) {
                 colorGrid[y][x] = "transparent"
                 data[index + 3] = 0 // Make transparent in the output
                 continue
