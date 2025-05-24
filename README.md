@@ -1,63 +1,62 @@
-# React + TypeScript + Vite
+# Melting Beads Designer
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A web application for designing and creating patterns for melting beads (also known as Perler beads or Hama beads). Create beautiful pixel art patterns that you can use as a reference for your physical bead creations.
 
-Currently, two official plugins are available:
+🔗 [Live Demo](https://romanlv.github.io/meltingbeads-designer/)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Features
 
-## Expanding the ESLint configuration
+- Interactive grid-based pattern designer
+- Color palette selection
+- Real-time pattern preview
+- Export functionality
+- Responsive design
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Tech Stack
 
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+- React
+- TypeScript
+- Vite
+- Tailwind CSS
+- Radix UI Components
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js (v18 or higher)
+- pnpm (recommended) or npm
+
+### Installation
+
+1. Clone the repository:
+```bash
+git clone https://github.com/romanlv/meltingbeads-designer.git
+cd meltingbeads-designer
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default tseslint.config({
-  plugins: {
-    // Add the react-x and react-dom plugins
-    'react-x': reactX,
-    'react-dom': reactDom,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended typescript rules
-    ...reactX.configs['recommended-typescript'].rules,
-    ...reactDom.configs.recommended.rules,
-  },
-})
+2. Install dependencies:
+```bash
+pnpm install
 ```
 
-## v0 template
-
-https://v0.dev/chat/image-to-beads-converter-FfXHBouITZr
-
+3. Start the development server:
+```bash
+pnpm dev
 ```
-npx shadcn@2.3.0 add "https://v0.dev/chat/b/b_SId6YpQ8jAR?token=eyJhbGciOiJkaXIiLCJlbmMiOiJBMjU2R0NNIn0..9c_YRPcPAq7LDQam.npvCp-FRx5TYuq6pDcz4kmRqws9sU2pQaY_XMKBn3vM-9NNVFMtt6n-Rsag.328LJGxm0v700YqEM7LfCw"
 
+The application will be available at `http://localhost:5173`
+
+### Building for Production
+
+To create a production build:
+
+```bash
+pnpm build
 ```
+
+The built files will be in the `dist` directory.
+
+## License
+
+This project is open source and available under the MIT License.
