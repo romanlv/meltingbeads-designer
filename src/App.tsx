@@ -695,7 +695,7 @@ export default function BeadPatternGenerator() {
                           ctx.clearRect(x * beadSize, y * beadSize, beadSize, beadSize)
                           
                           // If we're not erasing, draw the new bead
-                          if (editTool !== 'erase' || editTool === 'pick') {
+                          if (editTool !== 'erase') {
                             const color = editedBeadColors[y][x]
                             if (color !== 'transparent') {
                               ctx.fillStyle = color

@@ -185,8 +185,7 @@ export async function processImage(
               const r = pixels[idx]
               const g = pixels[idx + 1]
               const b = pixels[idx + 2]
-              const a = pixels[idx + 3]
-
+              
               // Check if this pixel should be transparent (background)
               if (isBackgroundColor(x, y)) {
                 colorGrid[y][x] = "transparent"
