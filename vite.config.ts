@@ -15,5 +15,5 @@ export default defineConfig({
       "@": resolve(__dirname, "./src"),
     },
   },
-  base: '/beads-patterns/',
+  base: '/meltingbeads-designer/',
 })
