@@ -596,9 +596,35 @@ export default function BeadPatternGenerator() {
                     </div>
                   </div>
                   
-                  {/* Color palette from existing colors */}
+                  {/* All palette colors */}
                   <div>
-                    <Label className="text-xs mb-1 block">Pattern colors:</Label>
+                    <Label className="text-xs mb-1 block">All palette colors:</Label>
+                    <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto p-1 border rounded bg-background">
+                      {beadPalettes[selectedPalette as keyof typeof beadPalettes].map((color) => (
+                        <TooltipProvider key={color}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                className={`w-5 h-5 rounded-sm border ${selectedColor === color ? 'ring-2 ring-primary' : ''}`}
+                                style={{ backgroundColor: color }}
+                                onClick={() => {
+                                  setSelectedColor(color)
+                                  setEditTool('add') // Switch to add tool when selecting a color
+                                }}
+                              />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>{color} {colorCounts[color] ? `(${colorCounts[color]} beads)` : ''}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  {/* Currently used colors */}
+                  <div className="mt-2">
+                    <Label className="text-xs mb-1 block">Used in pattern:</Label>
                     <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto p-1 border rounded bg-background">
                       {Object.keys(colorCounts)
                         .sort((a, b) => colorCounts[b] - colorCounts[a])
