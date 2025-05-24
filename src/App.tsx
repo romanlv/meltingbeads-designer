@@ -206,6 +206,46 @@ export default function BeadPatternGenerator() {
     setEditedBeadColors(newBeadColors)
     setHasEdits(true)
   }
+
+  // Handle drawing on canvas (mouse or touch)
+  const handleCanvasDraw = (clientX: number, clientY: number) => {
+    const canvas = patternCanvasRef.current
+    if (!canvas || !editedBeadColors.length) return
+    
+    // Calculate the position in the grid
+    const rect = canvas.getBoundingClientRect()
+    const scaleX = canvas.width / rect.width
+    const scaleY = canvas.height / rect.height
+    
+    const x = Math.floor(((clientX - rect.left) * scaleX) / beadSize)
+    const y = Math.floor(((clientY - rect.top) * scaleY) / beadSize)
+    
+    // Update the grid
+    handlePatternEdit(x, y)
+    
+    // Redraw the canvas
+    const ctx = canvas.getContext('2d', { alpha: true })
+    if (!ctx) return
+    
+    // Clear the space where the bead was clicked/touched
+    ctx.clearRect(x * beadSize, y * beadSize, beadSize, beadSize)
+    
+    // If we're not erasing, draw the new bead
+    if (editTool !== 'erase') {
+      const color = editedBeadColors[y][x]
+      if (color !== 'transparent') {
+        ctx.fillStyle = color
+        ctx.fillRect(x * beadSize, y * beadSize, beadSize, beadSize)
+        
+        // Draw grid line if enabled
+        if (showGrid) {
+          ctx.strokeStyle = "rgba(0, 0, 0, 0.2)"
+          ctx.lineWidth = 0.5
+          ctx.strokeRect(x * beadSize, y * beadSize, beadSize, beadSize)
+        }
+      }
+    }
+  }
   
   // Generate an updated pattern from edited bead colors
   const generateEditedPattern = () => {
@@ -671,86 +711,21 @@ export default function BeadPatternGenerator() {
                         ref={patternCanvasRef}
                         className="mx-auto"
                         style={{ cursor: editTool === 'pick' ? 'crosshair' : editTool === 'erase' ? 'not-allowed' : 'pointer' }}
-                        onClick={(e) => {
-                          // Get canvas and coordinates
-                          const canvas = patternCanvasRef.current
-                          if (!canvas || !editedBeadColors.length) return
-                          
-                          // Calculate the position in the grid
-                          const rect = canvas.getBoundingClientRect()
-                          const scaleX = canvas.width / rect.width
-                          const scaleY = canvas.height / rect.height
-                          
-                          const x = Math.floor(((e.clientX - rect.left) * scaleX) / beadSize)
-                          const y = Math.floor(((e.clientY - rect.top) * scaleY) / beadSize)
-                          
-                          // Update the grid
-                          handlePatternEdit(x, y)
-                          
-                          // Redraw the canvas
-                          const ctx = canvas.getContext('2d', { alpha: true })
-                          if (!ctx) return
-                          
-                          // Clear the space where the bead was clicked
-                          ctx.clearRect(x * beadSize, y * beadSize, beadSize, beadSize)
-                          
-                          // If we're not erasing, draw the new bead
-                          if (editTool !== 'erase') {
-                            const color = editedBeadColors[y][x]
-                            if (color !== 'transparent') {
-                              ctx.fillStyle = color
-                              ctx.fillRect(x * beadSize, y * beadSize, beadSize, beadSize)
-                              
-                              // Draw grid line if enabled
-                              if (showGrid) {
-                                ctx.strokeStyle = "rgba(0, 0, 0, 0.2)"
-                                ctx.lineWidth = 0.5
-                                ctx.strokeRect(x * beadSize, y * beadSize, beadSize, beadSize)
-                              }
-                            }
-                          }
-                        }}
+                        onClick={(e) => handleCanvasDraw(e.clientX, e.clientY)}
                         onMouseMove={(e) => {
                           // Only handle mouse move with button pressed (dragging)
                           if (e.buttons !== 1) return
-                          
-                          // Get canvas and coordinates
-                          const canvas = patternCanvasRef.current
-                          if (!canvas || !editedBeadColors.length) return
-                          
-                          // Calculate the position in the grid
-                          const rect = canvas.getBoundingClientRect()
-                          const scaleX = canvas.width / rect.width
-                          const scaleY = canvas.height / rect.height
-                          
-                          const x = Math.floor(((e.clientX - rect.left) * scaleX) / beadSize)
-                          const y = Math.floor(((e.clientY - rect.top) * scaleY) / beadSize)
-                          
-                          // Update the grid
-                          handlePatternEdit(x, y)
-                          
-                          // Redraw the canvas
-                          const ctx = canvas.getContext('2d', { alpha: true })
-                          if (!ctx) return
-                          
-                          // Clear the space where the bead was clicked
-                          ctx.clearRect(x * beadSize, y * beadSize, beadSize, beadSize)
-                          
-                          // If we're not erasing, draw the new bead
-                          if (editTool !== 'erase') {
-                            const color = editedBeadColors[y][x]
-                            if (color !== 'transparent') {
-                              ctx.fillStyle = color
-                              ctx.fillRect(x * beadSize, y * beadSize, beadSize, beadSize)
-                              
-                              // Draw grid line if enabled
-                              if (showGrid) {
-                                ctx.strokeStyle = "rgba(0, 0, 0, 0.2)"
-                                ctx.lineWidth = 0.5
-                                ctx.strokeRect(x * beadSize, y * beadSize, beadSize, beadSize)
-                              }
-                            }
-                          }
+                          handleCanvasDraw(e.clientX, e.clientY)
+                        }}
+                        onTouchStart={(e) => {
+                          e.preventDefault() // Prevent default touch behavior
+                          const touch = e.touches[0]
+                          handleCanvasDraw(touch.clientX, touch.clientY)
+                        }}
+                        onTouchMove={(e) => {
+                          e.preventDefault() // Prevent default touch behavior
+                          const touch = e.touches[0]
+                          handleCanvasDraw(touch.clientX, touch.clientY)
                         }}
                       />
                     ) : (
