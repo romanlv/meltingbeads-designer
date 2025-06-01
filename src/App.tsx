@@ -157,6 +157,32 @@ export default function BeadPatternGenerator() {
     }
   }, [isEditMode, editedBeadColors, beadSize, showGrid])
 
+  // Add this useEffect to handle touch events with passive: false
+  useEffect(() => {
+    const canvas = patternCanvasRef.current;
+    if (!canvas || !isEditMode) return;
+
+    const handleTouchStart = (e: TouchEvent) => {
+      e.preventDefault();
+      const touch = e.touches[0];
+      handleCanvasDraw(touch.clientX, touch.clientY);
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      e.preventDefault();
+      const touch = e.touches[0];
+      handleCanvasDraw(touch.clientX, touch.clientY);
+    };
+
+    canvas.addEventListener("touchstart", handleTouchStart, { passive: false });
+    canvas.addEventListener("touchmove", handleTouchMove, { passive: false });
+
+    return () => {
+      canvas.removeEventListener("touchstart", handleTouchStart);
+      canvas.removeEventListener("touchmove", handleTouchMove);
+    };
+  }, [isEditMode, editedBeadColors, beadSize, showGrid, editTool]);
+
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
@@ -774,16 +800,6 @@ export default function BeadPatternGenerator() {
                           // Only handle mouse move with button pressed (dragging)
                           if (e.buttons !== 1) return
                           handleCanvasDraw(e.clientX, e.clientY)
-                        }}
-                        onTouchStart={(e) => {
-                          e.preventDefault() // Prevent default touch behavior
-                          const touch = e.touches[0]
-                          handleCanvasDraw(touch.clientX, touch.clientY)
-                        }}
-                        onTouchMove={(e) => {
-                          e.preventDefault() // Prevent default touch behavior
-                          const touch = e.touches[0]
-                          handleCanvasDraw(touch.clientX, touch.clientY)
                         }}
                       />
                     ) : (
