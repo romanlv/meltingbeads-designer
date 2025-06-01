@@ -31,7 +31,6 @@ export const beadPalettes = {
     "#FFFFE0", // Light Yellow
     "#FFFACD", // Lemon Chiffon
     "#FFFF00", // Yellow
-    "#FFD700", // Gold
     "#BDB76B", // Dark Khaki
 
     // Greens
