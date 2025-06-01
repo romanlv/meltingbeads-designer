@@ -13,6 +13,16 @@ import { Switch } from "@/components/ui/switch"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { beadPalettes } from "@/lib/bead-palettes"
 import { processImage } from "@/lib/image-processor"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 export default function BeadPatternGenerator() {
   const [originalImage, setOriginalImage] = useState<string | null>(null)
@@ -28,6 +38,7 @@ export default function BeadPatternGenerator() {
   const [selectedColor, setSelectedColor] = useState<string>('#000000')
   const [editedBeadColors, setEditedBeadColors] = useState<string[][]>([])
   const [hasEdits, setHasEdits] = useState(false)
+  const [wasEditedInSession, setWasEditedInSession] = useState(false)
 
   // Configuration options
   const [beadSize, setBeadSize] = useState(10) // Size of each bead in pixels
@@ -42,6 +53,10 @@ export default function BeadPatternGenerator() {
   const processingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const patternCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const canvasContextRef = useRef<CanvasRenderingContext2D | null>(null)
+
+  // Add state for dialog
+  const [pendingSetting, setPendingSetting] = useState<null | { key: string, value: string | number | boolean }>(null)
+  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false)
 
   // Process image whenever settings change
   useEffect(() => {
@@ -150,6 +165,7 @@ export default function BeadPatternGenerator() {
     reader.onload = (e) => {
       const result = e.target?.result as string
       setOriginalImage(result)
+      setWasEditedInSession(false) // Reset edit session on new upload
     }
     reader.readAsDataURL(file)
   }
@@ -306,6 +322,7 @@ export default function BeadPatternGenerator() {
   const applyEdits = () => {
     generateEditedPattern()
     setIsEditMode(false)
+    setWasEditedInSession(true)
   }
   
   // Cancel edits and exit edit mode
@@ -318,6 +335,47 @@ export default function BeadPatternGenerator() {
   
   // Calculate total bead count
   const totalBeadCount = Object.values(colorCounts).reduce((sum, count) => sum + count, 0)
+
+  // Helper to handle setting changes with unsaved edit check
+  const handleSettingChange = (key: string, value: string | number | boolean) => {
+    if (isEditMode || wasEditedInSession) {
+      setPendingSetting({ key, value })
+      setShowUnsavedDialog(true)
+    } else {
+      applySettingChange(key, value)
+    }
+  }
+
+  // Actually apply the setting change
+  const applySettingChange = (key: string, value: string | number | boolean) => {
+    switch (key) {
+      case 'maxBeads': setMaxBeads(value as number); break;
+      case 'beadSize': setBeadSize(value as number); break;
+      case 'selectedPalette': setSelectedPalette(value as string); break;
+      case 'showGrid': setShowGrid(value as boolean); break;
+      case 'dithering': setDithering(value as boolean); break;
+      case 'removeBackground': setRemoveBackground(value as boolean); break;
+      case 'backgroundThreshold': setBackgroundThreshold(value as number); break;
+      default: break;
+    }
+    // Discard edits and exit edit mode
+    setIsEditMode(false)
+    setHasEdits(false)
+    setShowUnsavedDialog(false)
+    setWasEditedInSession(false)
+    setPendingSetting(null)
+  }
+
+  // Handler for dialog action
+  const handleDialogConfirm = () => {
+    if (pendingSetting) {
+      applySettingChange(pendingSetting.key, pendingSetting.value)
+    }
+  }
+  const handleDialogCancel = () => {
+    setShowUnsavedDialog(false)
+    setPendingSetting(null)
+  }
 
   return (
     <main className="container max-w-4xl mx-auto px-4 py-6">
@@ -388,7 +446,7 @@ export default function BeadPatternGenerator() {
                   max={50}
                   step={1}
                   value={[maxBeads]}
-                  onValueChange={(value) => setMaxBeads(value[0])}
+                  onValueChange={(value) => handleSettingChange('maxBeads', value[0])}
                 />
               </div>
 
@@ -412,13 +470,13 @@ export default function BeadPatternGenerator() {
                   max={20}
                   step={1}
                   value={[beadSize]}
-                  onValueChange={(value) => setBeadSize(value[0])}
+                  onValueChange={(value) => handleSettingChange('beadSize', value[0])}
                 />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="bead-palette">Bead Palette</Label>
-                <Select value={selectedPalette} onValueChange={setSelectedPalette}>
+                <Select value={selectedPalette} onValueChange={(value) => handleSettingChange('selectedPalette', value)}>
                   <SelectTrigger id="bead-palette">
                     <SelectValue placeholder="Select a palette" />
                   </SelectTrigger>
@@ -448,7 +506,7 @@ export default function BeadPatternGenerator() {
                       </Tooltip>
                     </TooltipProvider>
                   </div>
-                  <Switch id="remove-background" checked={removeBackground} onCheckedChange={setRemoveBackground} />
+                  <Switch id="remove-background" checked={removeBackground} onCheckedChange={(value) => handleSettingChange('removeBackground', value)} />
                 </div>
 
                 {removeBackground && (
@@ -472,7 +530,7 @@ export default function BeadPatternGenerator() {
                       max={100}
                       step={1}
                       value={[backgroundThreshold]}
-                      onValueChange={(value) => setBackgroundThreshold(value[0])}
+                      onValueChange={(value) => handleSettingChange('backgroundThreshold', value[0])}
                     />
                   </div>
                 )}
@@ -496,7 +554,7 @@ export default function BeadPatternGenerator() {
                       </Tooltip>
                     </TooltipProvider>
                   </div>
-                  <Switch id="show-grid" checked={showGrid} onCheckedChange={setShowGrid} />
+                  <Switch id="show-grid" checked={showGrid} onCheckedChange={(value) => handleSettingChange('showGrid', value)} />
                 </div>
 
                 <div className="flex items-center justify-between">
@@ -513,7 +571,7 @@ export default function BeadPatternGenerator() {
                       </Tooltip>
                     </TooltipProvider>
                   </div>
-                  <Switch id="dithering" checked={dithering} onCheckedChange={setDithering} />
+                  <Switch id="dithering" checked={dithering} onCheckedChange={(value) => handleSettingChange('dithering', value)} />
                 </div>
               </div>
             </CardContent>
@@ -781,6 +839,23 @@ export default function BeadPatternGenerator() {
       <footer className="mt-8 text-center text-sm text-muted-foreground">
         <p>All processing happens in your browser - no images are uploaded to any server.</p>
       </footer>
+
+      {showUnsavedDialog && (
+        <AlertDialog open={showUnsavedDialog} onOpenChange={setShowUnsavedDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>You have unsaved changes</AlertDialogTitle>
+              <AlertDialogDescription>
+                Changing the pattern settings will discard your current edits. Are you sure you want to continue?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={handleDialogCancel}>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDialogConfirm}>Discard changes</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </main>
   )
 }
